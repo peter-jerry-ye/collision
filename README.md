@@ -2,7 +2,8 @@
 
 A simple implementation of QuadTree.
 
-Drag your mouse to draw on the graph and see the QuadTree.
+Drag your mouse to draw on the graph and see the QuadTree. Right click to remove
+the boxes and see the QuadTree restored.
 
 ## Usage
 

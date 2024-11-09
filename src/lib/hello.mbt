@@ -82,14 +82,14 @@ pub fn draw[T : Object](self : QuadTree[T]) -> Unit {
   }
 }
 
-const MIN_SIZE = 10
-
-fn contain_rect[T : Object](self : QuadTree[T], object : Rect) -> Bool {
+pub fn rect[T](self : QuadTree[T]) -> Rect {
   match self {
-    Leaf(rect, _) => object.inside(rect)
-    Tree(rect, _, _, _, _, _) => object.inside(rect)
+    Leaf(rect, _) => rect
+    Tree(rect, _, _, _, _, _) => rect
   }
 }
+
+const MIN_SIZE = 10
 
 pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
   let obj = object.rect()
@@ -143,7 +143,7 @@ pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
           .fold(init=tree, QuadTree::insert)
         }
       Tree(rect, objects, up_left, up_right, down_left, down_right) =>
-        if up_left.contain_rect(obj) {
+        if obj.inside(up_left.rect()) {
           Tree(
             rect,
             objects,
@@ -152,7 +152,7 @@ pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
             down_left,
             down_right,
           )
-        } else if up_right.contain_rect(obj) {
+        } else if obj.inside(up_right.rect()) {
           Tree(
             rect,
             objects,
@@ -161,7 +161,7 @@ pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
             down_left,
             down_right,
           )
-        } else if down_left.contain_rect(obj) {
+        } else if obj.inside(down_left.rect()) {
           Tree(
             rect,
             objects,
@@ -170,7 +170,7 @@ pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
             insert_aux(down_left),
             down_right,
           )
-        } else if down_right.contain_rect(obj) {
+        } else if obj.inside(down_right.rect()) {
           Tree(
             rect,
             objects,
