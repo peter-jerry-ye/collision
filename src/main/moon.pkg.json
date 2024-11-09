@@ -1,0 +1,28 @@
+{
+  "import": [
+    "peter-jerry-ye/collision/lib",
+    "moonbitlang/wasm4"
+  ],
+  "link": {
+    "wasm": {
+      "import-memory": {
+        "module": "env",
+        "name": "memory"
+      },
+      "exports": [
+        "start",
+        "update"
+      ]
+    },
+    "wasm-gc": {
+      "import-memory": {
+        "module": "env",
+        "name": "memory"
+      },
+      "exports": [
+        "start",
+        "update"
+      ]
+    }
+  }
+}
