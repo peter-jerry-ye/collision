@@ -194,3 +194,76 @@ pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
 
   insert_aux(self)
 }
+
+pub fn delete[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
+  let obj = object.rect()
+  fn delete_aux(self : QuadTree[T]) -> QuadTree[T] {
+    match self {
+      Leaf(rect, objects) => Leaf(rect, objects.filter(fn { t => t != object }))
+      Tree(rect, objects, up_left, up_right, down_left, down_right) => {
+        let objects = objects.filter(fn { t => t != object })
+        let up_left = if obj.inside(up_left.rect()) {
+          delete_aux(up_left)
+        } else {
+          up_left
+        }
+        let up_right = if obj.inside(up_right.rect()) {
+          delete_aux(up_right)
+        } else {
+          up_right
+        }
+        let down_left = if obj.inside(down_left.rect()) {
+          delete_aux(down_left)
+        } else {
+          down_left
+        }
+        let down_right = if obj.inside(down_right.rect()) {
+          delete_aux(down_right)
+        } else {
+          down_right
+        }
+        match (up_left, up_right, down_left, down_right) {
+          (
+            Leaf(_, @immut/list.Nil),
+            Leaf(_, @immut/list.Nil),
+            Leaf(_, @immut/list.Nil),
+            Leaf(_, @immut/list.Nil),
+          ) => Leaf(rect, objects)
+          _ => Tree(rect, objects, up_left, up_right, down_left, down_right)
+        }
+      }
+    }
+  }
+
+  delete_aux(self)
+}
+
+pub fn search[T : Object](self : QuadTree[T], rect : Rect) -> @immut/list.T[T] {
+  let mut result = @immut/list.Nil
+  fn aux(self) -> Unit {
+    match self {
+      Leaf(_, list) =>
+        result = list
+          .filter(fn(o : T) { o.rect().intersect(rect) })
+          .concat(result)
+      Tree(_, list, up_left, up_right, down_left, down_right) => {
+        result = list.filter(fn(o) { o.rect().intersect(rect) }).concat(result)
+        if rect.inside(up_left.rect()) {
+          aux(up_left)
+        }
+        if rect.inside(up_right.rect()) {
+          aux(up_right)
+        }
+        if rect.inside(down_left.rect()) {
+          aux(down_left)
+        }
+        if rect.inside(down_right.rect()) {
+          aux(down_right)
+        }
+      }
+    }
+  }
+
+  aux(self)
+  result
+}

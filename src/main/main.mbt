@@ -63,47 +63,6 @@ fn delete_from_tree[T : @lib.Object](
   tree : @lib.QuadTree[T],
   point : @lib.Point
 ) -> @lib.QuadTree[T] {
-  fn inside(p : @lib.Point, rect : @lib.Rect) -> Bool {
-    p.x >= rect.top_left.x &&
-    p.x <= rect.bottom_right.x &&
-    p.y >= rect.top_left.y &&
-    p.y <= rect.bottom_right.y
-  }
-
-  match tree {
-    Leaf(rect, objects) =>
-      Leaf(rect, objects.filter(fn { t => inside(point, t.rect()).not() }))
-    Tree(rect, objects, up_left, up_right, down_left, down_right) => {
-      let objects = objects.filter(fn { t => inside(point, t.rect()).not() })
-      let up_left = if (point |> inside(up_left.rect())) {
-        delete_from_tree(up_left, point)
-      } else {
-        up_left
-      }
-      let up_right = if (point |> inside(up_right.rect())) {
-        delete_from_tree(up_right, point)
-      } else {
-        up_right
-      }
-      let down_left = if (point |> inside(down_left.rect())) {
-        delete_from_tree(down_left, point)
-      } else {
-        down_left
-      }
-      let down_right = if (point |> inside(down_right.rect())) {
-        delete_from_tree(down_right, point)
-      } else {
-        down_right
-      }
-      match (up_left, up_right, down_left, down_right) {
-        (
-          Leaf(_, @immut/list.Nil),
-          Leaf(_, @immut/list.Nil),
-          Leaf(_, @immut/list.Nil),
-          Leaf(_, @immut/list.Nil),
-        ) => Leaf(rect, objects)
-        _ => Tree(rect, objects, up_left, up_right, down_left, down_right)
-      }
-    }
-  }
+  let rects = tree.search({ top_left: point, bottom_right: point })
+  rects.fold(init=tree, @lib.delete)
 }
