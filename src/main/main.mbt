@@ -1,68 +1,80 @@
-pub fn start() -> Unit {
-  @wasm4.set_draw_colors(index=1, 1)
-  @wasm4.set_draw_colors(index=2, 2)
-}
-
 let rect : @lib.Rect = @lib.Rect::{
   top_left: { x: 0, y: 0 },
   bottom_right: { x: 160, y: 160 },
 }
 
-let tree : Ref[@lib.QuadTree[@lib.Rect]] = { val: @lib.QuadTree::new(rect) }
+let tree : Ref[@lib.QuadTree[@game.Tank]] = { val: @lib.QuadTree::new(rect) }
 
-let origin : Ref[@lib.Point?] = { val: None }
+let array : Array[@game.Tank] = []
 
-let current : Ref[@lib.Point?] = { val: None }
+let random : @random.Rand = @random.new()
 
-const MIN_SIZE = 2
+let id : Ref[UInt] = { val: 0 }
 
-pub fn update() -> Unit {
-  let mouse = @wasm4.get_mouse()
-  if mouse.left {
-    match origin.val {
-      None => {
-        origin.val = Some({ x: mouse.x, y: mouse.y })
-        current.val = Some({ x: mouse.x, y: mouse.y })
-        @wasm4.rect(mouse.x, mouse.y, 1, 1)
+const NUM = 140
+
+pub fn start() -> Unit {
+  for i = 0; i < NUM; i = i + 1 {
+    id.val += 1
+    let mut tank = @game.Tank::new(
+      id.val,
+      {
+        x: random.int(limit=160 - @game.SIZE),
+        y: random.int(limit=160 - @game.SIZE),
+      },
+    )
+    loop tree.val.search(tank.rect()) {
+      Nil => {
+        tree.val = tree.val.insert(tank)
+        array.push(tank)
       }
-      Some({ x, y }) => {
-        current.val = Some({ x: mouse.x, y: mouse.y })
-        @wasm4.rect(
-          @math.minimum(x, mouse.x),
-          @math.minimum(y, mouse.y),
-          (x - mouse.x).abs(),
-          (y - mouse.y).abs(),
+      _ => {
+        tank = @game.Tank::new(
+          id.val,
+          {
+            x: random.int(limit=160 - @game.SIZE),
+            y: random.int(limit=160 - @game.SIZE),
+          },
         )
-      }
-    }
-  } else {
-    match current.val {
-      None => ()
-      Some({ x, y }) => {
-        guard let Some({ x: x0, y: y0 }) = origin.val
-        origin.val = None
-        current.val = None
-        if (x - x0).abs() > MIN_SIZE && (y - y0).abs() > MIN_SIZE {
-          tree.val = tree.val.insert(
-            {
-              top_left: { x: @math.minimum(x0, x), y: @math.minimum(y0, y) },
-              bottom_right: { x: @math.maximum(x0, x), y: @math.maximum(y0, y) },
-            },
-          )
-        }
+        continue tree.val.search(tank.rect())
       }
     }
   }
-  if mouse.right {
-    tree.val = delete_from_tree(tree.val, { x: mouse.x, y: mouse.y })
-  }
-  tree.val.draw()
 }
 
-fn delete_from_tree[T : @lib.Object](
-  tree : @lib.QuadTree[T],
-  point : @lib.Point
-) -> @lib.QuadTree[T] {
-  let rects = tree.search({ top_left: point, bottom_right: point })
-  rects.fold(init=tree, @lib.delete)
+const SPEED = 5
+
+let frame : Ref[Int] = { val: 0 }
+
+pub fn update() -> Unit {
+  if frame.val % 1 == 0 {
+    for i = 0; i < array.length(); i = i + 1 {
+      let tank = array[i]
+      let collidables = tree.val.ahead(tank.direction, SPEED, tank)
+      let actual_distance = collidables
+        .map(fn { (_, i) => i })
+        .fold(init=SPEED, @math.minimum)
+      let actual_distance = match tank.direction {
+        Up => @math.minimum(actual_distance, tank.rect.top_left.y)
+        Down =>
+          @math.minimum(actual_distance, 160 - tank.rect.bottom_right.y - 1)
+        Left => @math.minimum(actual_distance, tank.rect.top_left.x)
+        Right =>
+          @math.minimum(actual_distance, 160 - tank.rect.bottom_right.x - 1)
+      }
+      let new_tank = {
+        ..tank,
+        direction: if actual_distance < SPEED {
+          tank.direction.clockwise()
+        } else {
+          tank.direction
+        },
+        rect: tank.rect.move(tank.direction, actual_distance),
+      }
+      array[i] = new_tank
+      tree.val = tree.val.delete(tank).insert(new_tank)
+    }
+  }
+  frame.val += 1
+  array.iter().each(@lib.Draw::draw)
 }

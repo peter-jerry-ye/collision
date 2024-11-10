@@ -1,0 +1,6 @@
+{
+    "import": [
+        "peter-jerry-ye/collision/lib",
+        "moonbitlang/wasm4"
+    ]
+}

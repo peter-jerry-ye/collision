@@ -1,50 +1,8 @@
-pub trait Draw {
-  draw(Self) -> Unit
-}
-
-pub struct Point {
-  x : Int
-  y : Int
-} derive(Eq, Show)
-
-pub struct Rect {
-  top_left : Point
-  bottom_right : Point
-} derive(Eq, Show)
-
-pub fn draw(self : Rect) -> Unit {
-  @wasm4.rect(
-    self.top_left.x,
-    self.top_left.y,
-    self.bottom_right.x - self.top_left.x,
-    self.bottom_right.y - self.top_left.y,
-  )
-}
-
-pub fn intersect(self : Rect, other : Rect) -> Bool {
-  if self.bottom_right.x < other.top_left.x ||
-    self.top_left.x > other.bottom_right.x {
-    return false
-  }
-  if self.bottom_right.y < other.top_left.y ||
-    self.top_left.y > other.bottom_right.y {
-    return false
-  }
-  true
-}
-
-pub fn inside(self : Rect, other : Rect) -> Bool {
-  self.bottom_right.x <= other.bottom_right.x &&
-  self.top_left.x >= other.top_left.x &&
-  self.bottom_right.y <= other.bottom_right.y &&
-  self.top_left.y >= other.top_left.y
-}
-
-pub trait Object: Draw + Eq {
+pub trait Boxed {
   rect(Self) -> Rect
 }
 
-pub impl Object for Rect with rect(self) { self }
+pub impl Boxed for Rect with rect(self) { self }
 
 pub enum QuadTree[T] {
   Leaf(Rect, @immut/list.T[T])
@@ -58,24 +16,22 @@ pub enum QuadTree[T] {
   )
 } derive(Show)
 
-pub fn QuadTree::new[T : Object](rect : Rect) -> QuadTree[T] {
+pub fn QuadTree::new[T : Boxed](rect : Rect) -> QuadTree[T] {
   Leaf(rect, @immut/list.T::Nil)
 }
 
-pub fn draw[T : Object](self : QuadTree[T]) -> Unit {
+pub fn draw[T : Draw](self : QuadTree[T]) -> Unit {
   match self {
-    Leaf(rect, objects) => {
+    Leaf(_rect, objects) => {
       @wasm4.set_draw_colors(index=1, 0)
       @wasm4.set_draw_colors(index=2, 2)
-      rect.draw()
-      @wasm4.set_draw_colors(index=2, 3)
+      _rect.draw()
       objects.iter().each(Draw::draw)
     }
-    Tree(rect, objects, up_left, up_right, down_left, down_right) => {
+    Tree(_rect, objects, up_left, up_right, down_left, down_right) => {
       @wasm4.set_draw_colors(index=1, 0)
       @wasm4.set_draw_colors(index=2, 2)
-      rect.draw()
-      @wasm4.set_draw_colors(index=2, 3)
+      _rect.draw()
       objects.iter().each(Draw::draw)
       [up_left, up_right, down_left, down_right].iter().each(Draw::draw)
     }
@@ -91,7 +47,7 @@ pub fn rect[T](self : QuadTree[T]) -> Rect {
 
 const MIN_SIZE = 10
 
-pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
+pub fn insert[T : Boxed](self : QuadTree[T], object : T) -> QuadTree[T] {
   let obj = object.rect()
   fn insert_aux(tree) -> QuadTree[T] {
     match tree {
@@ -195,7 +151,7 @@ pub fn insert[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
   insert_aux(self)
 }
 
-pub fn delete[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
+pub fn delete[T : Boxed + Eq](self : QuadTree[T], object : T) -> QuadTree[T] {
   let obj = object.rect()
   fn delete_aux(self : QuadTree[T]) -> QuadTree[T] {
     match self {
@@ -238,7 +194,8 @@ pub fn delete[T : Object](self : QuadTree[T], object : T) -> QuadTree[T] {
   delete_aux(self)
 }
 
-pub fn search[T : Object](self : QuadTree[T], rect : Rect) -> @immut/list.T[T] {
+/// Search for objects that may intersect with the `rect`.
+pub fn search[T : Boxed](self : QuadTree[T], rect : Rect) -> @immut/list.T[T] {
   let mut result = @immut/list.Nil
   fn aux(self) -> Unit {
     match self {
@@ -248,16 +205,16 @@ pub fn search[T : Object](self : QuadTree[T], rect : Rect) -> @immut/list.T[T] {
           .concat(result)
       Tree(_, list, up_left, up_right, down_left, down_right) => {
         result = list.filter(fn(o) { o.rect().intersect(rect) }).concat(result)
-        if rect.inside(up_left.rect()) {
+        if rect.intersect(up_left.rect()) {
           aux(up_left)
         }
-        if rect.inside(up_right.rect()) {
+        if rect.intersect(up_right.rect()) {
           aux(up_right)
         }
-        if rect.inside(down_left.rect()) {
+        if rect.intersect(down_left.rect()) {
           aux(down_left)
         }
-        if rect.inside(down_right.rect()) {
+        if rect.intersect(down_right.rect()) {
           aux(down_right)
         }
       }
@@ -266,4 +223,60 @@ pub fn search[T : Object](self : QuadTree[T], rect : Rect) -> @immut/list.T[T] {
 
   aux(self)
   result
+}
+
+/// Search for objects that the `object` may collide within the `distance` in the `direction`.
+pub fn ahead[T : Boxed + Eq](
+  self : QuadTree[T],
+  direction : Direction,
+  distance : Int,
+  object : T
+) -> Iter[(T, Int)] {
+  let { top_left: { x: x0, y: y0 }, bottom_right: { x: x1, y: y1 } } = object.rect()
+  match direction {
+    Up => {
+      let rect = {
+        top_left: { x: x0, y: y0 - distance },
+        bottom_right: { x: x1, y: y0 },
+      }
+      self
+      .search(rect)
+      .iter()
+      .filter(fn { o => o != object })
+      .map(fn(o : T) { (o, y0 - o.rect().bottom_right.y - 1) })
+    }
+    Down => {
+      let rect = {
+        top_left: { x: x0, y: y1 },
+        bottom_right: { x: x1, y: y1 + distance },
+      }
+      self
+      .search(rect)
+      .iter()
+      .filter(fn { o => o != object })
+      .map(fn(o : T) { (o, o.rect().top_left.y - y1 - 1) })
+    }
+    Left => {
+      let rect = {
+        top_left: { x: x0 - distance, y: y0 },
+        bottom_right: { x: x0, y: y1 },
+      }
+      self
+      .search(rect)
+      .iter()
+      .filter(fn { o => o != object })
+      .map(fn(o : T) { (o, x0 - o.rect().bottom_right.x - 1) })
+    }
+    Right => {
+      let rect = {
+        top_left: { x: x1, y: y0 },
+        bottom_right: { x: x1 + distance, y: y1 },
+      }
+      self
+      .search(rect)
+      .iter()
+      .filter(fn { o => o != object })
+      .map(fn(o : T) { (o, o.rect().top_left.x - x1 - 1) })
+    }
+  }
 }

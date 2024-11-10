@@ -2,8 +2,10 @@
 
 A simple implementation of QuadTree.
 
-Drag your mouse to draw on the graph and see the QuadTree. Right click to remove
-the boxes and see the QuadTree restored.
+Many tanks will be going forward until they collide with each other or the
+boundry.
+
+Sit back and enjoy.
 
 ## Usage
 
